@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Class Behavior Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="icon" href="data:," />
+  <style>
+    .tab-active { @apply border-b-2 border-indigo-600 text-indigo-700; }
+    .btn { @apply inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50; }
+    .btn-secondary { @apply bg-slate-100 text-slate-800 hover:bg-slate-200; }
+    .badge { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium; }
+    .badge-green { @apply bg-green-100 text-green-700; }
+    .badge-red { @apply bg-red-100 text-red-700; }
+    .input { @apply w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
+    .select { @apply w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500; }
+    .label { @apply block text-sm font-medium text-slate-700 mb-1; }
+    .card { @apply bg-white rounded-lg shadow p-4; }
+    .link { @apply text-indigo-600 hover:underline; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <header class="bg-white border-b sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded bg-indigo-600 text-white grid place-items-center font-bold">BT</div>
+        <div>
+          <h1 class="text-lg font-semibold">Class Behavior Tracker</h1>
+          <p class="text-xs text-slate-500">Local-only. Use Export to back up data.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="exportCsvBtn" class="btn" title="Export CSV"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 11l5 5 5-5"/><path d="M12 4v12"/></svg><span class="hidden sm:inline">Export</span></button>
+        <label class="btn-secondary cursor-pointer px-3 py-2 rounded-md text-sm font-medium">
+          <input id="importFile" type="file" accept=".csv,.json" class="hidden" />
+          Import
+        </label>
+      </div>
+    </div>
+    <nav class="max-w-7xl mx-auto px-4">
+      <ul class="flex gap-6 text-sm">
+        <li><button data-tab="dashboard" class="py-3 tab-link tab-active">Dashboard</button></li>
+        <li><button data-tab="new" class="py-3 tab-link">Log Incident</button></li>
+        <li><button data-tab="records" class="py-3 tab-link">Records</button></li>
+        <li><button data-tab="settings" class="py-3 tab-link">Settings</button></li>
+        <li class="ml-auto"><button data-tab="help" class="py-3 tab-link">Help</button></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4 space-y-6">
+    <section id="alerts" class="hidden"></section>
+
+    <section id="dashboard" class="tab-section">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-slate-600">Grade</label>
+          <select id="dashGradeFilter" class="select w-40"></select>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-slate-600">Date</label>
+          <input id="dashFrom" type="date" class="input w-40" />
+          <span class="text-slate-400">to</span>
+          <input id="dashTo" type="date" class="input w-40" />
+          <button id="dashFilterBtn" class="btn-secondary">Apply</button>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-4 gap-4 mt-3">
+        <div class="card"><div class="text-xs text-slate-500">Total Incidents</div><div id="statTotal" class="text-2xl font-semibold">0</div></div>
+        <div class="card"><div class="text-xs text-slate-500">Positive</div><div id="statPositive" class="text-2xl font-semibold">0</div></div>
+        <div class="card"><div class="text-xs text-slate-500">Negative</div><div id="statNegative" class="text-2xl font-semibold">0</div></div>
+        <div class="card"><div class="text-xs text-slate-500">Parent Notified</div><div id="statParent" class="text-2xl font-semibold">0</div></div>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-4">
+        <div class="card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-medium">Positive vs Negative</h3>
+            <button id="refreshChartsBtn" class="btn-secondary text-xs">Refresh</button>
+          </div>
+          <canvas id="pieChart" height="160"></canvas>
+        </div>
+        <div class="card">
+          <h3 class="font-medium mb-2">Incidents by Grade</h3>
+          <canvas id="barChart" height="160"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="font-medium mb-3">Top Students (by incidents)</h3>
+        <ul id="topStudents" class="text-sm space-y-2"></ul>
+      </div>
+    </section>
+
+    <section id="new" class="tab-section hidden">
+      <div class="card">
+        <h3 class="font-medium mb-3">Register a Behavior Incident</h3>
+        <form id="incidentForm" class="grid md:grid-cols-2 gap-4">
+          <div>
+            <label class="label">Student Name</label>
+            <input id="fStudent" class="input" placeholder="e.g., Jane Doe" required />
+          </div>
+          <div>
+            <label class="label">Student ID (optional)</label>
+            <input id="fStudentId" class="input" placeholder="e.g., 12345" />
+          </div>
+          <div>
+            <label class="label">Grade</label>
+            <select id="fGrade" class="select" required></select>
+          </div>
+          <div>
+            <label class="label">Section (optional)</label>
+            <input id="fSection" class="input" placeholder="e.g., A" />
+          </div>
+          <div>
+            <label class="label">Date & Time</label>
+            <input id="fDateTime" type="datetime-local" class="input" required />
+          </div>
+          <div>
+            <label class="label">Category</label>
+            <select id="fCategory" class="select" required>
+              <option value="Participation">Participation</option>
+              <option value="Respect">Respect</option>
+              <option value="Helping">Helping</option>
+              <option value="Leadership">Leadership</option>
+              <option value="Homework Missing">Homework Missing</option>
+              <option value="Disruption">Disruption</option>
+              <option value="Tardiness">Tardiness</option>
+              <option value="Cheating">Cheating</option>
+              <option value="Bullying">Bullying</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Type</label>
+            <div class="flex gap-4">
+              <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="fType" value="Positive" checked /> Positive</label>
+              <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="fType" value="Negative" /> Negative</label>
+            </div>
+          </div>
+          <div>
+            <label class="label">Severity / Rating (1-5)</label>
+            <input id="fSeverity" type="number" min="1" max="5" value="3" class="input" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="label">Description</label>
+            <textarea id="fDescription" class="input" rows="3" placeholder="Brief details of the incident" required></textarea>
+          </div>
+          <div>
+            <label class="label">Action Taken</label>
+            <select id="fAction" class="select">
+              <option value="None">None</option>
+              <option value="Verbal Warning">Verbal Warning</option>
+              <option value="Written Warning">Written Warning</option>
+              <option value="Detention">Detention</option>
+              <option value="Loss of Privileges">Loss of Privileges</option>
+              <option value="Parent Meeting">Parent Meeting</option>
+              <option value="Appreciation Note">Appreciation Note</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Parent Notified?</label>
+            <input id="fParent" type="checkbox" class="mr-2" /> <span class="text-sm">Yes</span>
+          </div>
+          <div class="md:col-span-2">
+            <label class="label">Notes (optional)</label>
+            <input id="fNotes" class="input" placeholder="Additional notes" />
+          </div>
+          <div class="md:col-span-2 flex gap-2">
+            <button type="submit" class="btn">Save Incident</button>
+            <button type="reset" class="btn-secondary">Clear</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="records" class="tab-section hidden">
+      <div class="card">
+        <div class="flex flex-wrap items-end gap-3">
+          <div>
+            <label class="label">Grade</label>
+            <select id="rGrade" class="select w-40"></select>
+          </div>
+          <div>
+            <label class="label">Type</label>
+            <select id="rType" class="select w-40">
+              <option value="All">All</option>
+              <option value="Positive">Positive</option>
+              <option value="Negative">Negative</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Category</label>
+            <select id="rCategory" class="select w-48">
+              <option value="All">All</option>
+              <option>Participation</option>
+              <option>Respect</option>
+              <option>Helping</option>
+              <option>Leadership</option>
+              <option>Homework Missing</option>
+              <option>Disruption</option>
+              <option>Tardiness</option>
+              <option>Cheating</option>
+              <option>Bullying</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">From</label>
+            <input id="rFrom" type="date" class="input w-40" />
+          </div>
+          <div>
+            <label class="label">To</label>
+            <input id="rTo" type="date" class="input w-40" />
+          </div>
+          <div class="flex-1">
+            <label class="label">Search</label>
+            <input id="rSearch" class="input" placeholder="Student, description, action" />
+          </div>
+          <button id="rApply" class="btn">Apply</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-sm text-slate-500" id="recordCount">0 records</div>
+          <div class="flex items-center gap-2">
+            <label class="text-sm text-slate-600">Sort by</label>
+            <select id="rSort" class="select w-44">
+              <option value="date_desc">Date (newest)</option>
+              <option value="date_asc">Date (oldest)</option>
+              <option value="sev_desc">Severity (high)</option>
+              <option value="sev_asc">Severity (low)</option>
+            </select>
+          </div>
+        </div>
+        <div class="overflow-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500 border-b">
+                <th class="py-2 pr-4">Date</th>
+                <th class="py-2 pr-4">Student</th>
+                <th class="py-2 pr-4">Grade</th>
+                <th class="py-2 pr-4">Type</th>
+                <th class="py-2 pr-4">Category</th>
+                <th class="py-2 pr-4">Severity</th>
+                <th class="py-2 pr-4">Action</th>
+                <th class="py-2 pr-4">Parent</th>
+                <th class="py-2 pr-4">Notes</th>
+                <th class="py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="recordsTbody"></tbody>
+          </table>
+        </div>
+        <div class="flex items-center justify-between mt-3">
+          <div class="text-xs text-slate-500" id="paginationInfo"></div>
+          <div class="flex items-center gap-2">
+            <button id="prevPage" class="btn-secondary px-2">Prev</button>
+            <button id="nextPage" class="btn-secondary px-2">Next</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="settings" class="tab-section hidden">
+      <div class="grid lg:grid-cols-2 gap-4">
+        <div class="card">
+          <h3 class="font-medium mb-2">Grades</h3>
+          <div class="flex gap-2 mb-2">
+            <input id="newGrade" class="input" placeholder="e.g., Grade 7" />
+            <button id="addGradeBtn" class="btn">Add</button>
+          </div>
+          <ul id="gradeList" class="text-sm space-y-2"></ul>
+        </div>
+        <div class="card">
+          <h3 class="font-medium mb-2">Backup & Restore</h3>
+          <p class="text-sm text-slate-600 mb-2">Data is stored in your browser (localStorage). Export regularly for backup or to transfer to another device.</p>
+          <div class="flex gap-2">
+            <button id="exportJsonBtn" class="btn">Export JSON</button>
+            <label class="btn-secondary cursor-pointer">
+              <input id="importJsonFile" type="file" accept=".json" class="hidden" />
+              Import JSON
+            </label>
+            <button id="resetAllBtn" class="btn-secondary">Reset All</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="help" class="tab-section hidden">
+      <div class="card space-y-3 text-sm">
+        <h3 class="font-medium">How this works</h3>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>This is a single-file, local browser app. No server involved.</li>
+          <li>Your data is saved in your browser's localStorage on this device.</li>
+          <li>To persist or move data, use Export (CSV/JSON) and Import.</li>
+        </ul>
+        <h3 class="font-medium">About your questions</h3>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>Running here: I can't host a live app for you, but you can download this file and open it in any modern browser to use it immediately.</li>
+          <li>Saving progress: Yes, on the same device/browser. Clearing site data or using a different browser/device will not have your records unless you import a backup.</li>
+        </ul>
+        <h3 class="font-medium">Tips</h3>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>Use Settings to add/remove Grades to match your classes.</li>
+          <li>Use positive entries for appreciation and recognitions.</li>
+          <li>Filter Records and export CSV for sharing or parent meetings.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <template id="gradeItemTpl">
+    <li class="flex items-center justify-between border rounded px-2 py-1">
+      <span class="truncate"></span>
+      <div class="flex items-center gap-2">
+        <button class="link text-xs rename">Rename</button>
+        <button class="link text-xs text-red-600 remove">Remove</button>
+      </div>
+    </li>
+  </template>
+
+  <template id="recordRowTpl">
+    <tr class="border-b last:border-0">
+      <td class="py-2 pr-4 text-slate-600 date"></td>
+      <td class="py-2 pr-4 student"></td>
+      <td class="py-2 pr-4 grade"></td>
+      <td class="py-2 pr-4 type"></td>
+      <td class="py-2 pr-4 category"></td>
+      <td class="py-2 pr-4 severity"></td>
+      <td class="py-2 pr-4 action"></td>
+      <td class="py-2 pr-4 parent"></td>
+      <td class="py-2 pr-4 notes max-w-[240px] truncate"></td>
+      <td class="py-2">
+        <button class="link text-xs edit">Edit</button>
+        <button class="link text-xs text-red-600 ml-2 delete">Delete</button>
+      </td>
+    </tr>
+  </template>
+
+  <div id="modal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-30">
+    <div class="bg-white rounded-lg shadow max-w-lg w-full p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 id="modalTitle" class="font-medium">Edit Incident</h3>
+        <button id="modalClose" class="text-slate-500">✕</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'behaviorTrackerData_v1';
+    const DEFAULT_GRADES = [
+      'Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12'
+    ];
+
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+    function uid() { return 'i_' + Math.random().toString(36).slice(2) + Date.now().toString(36); }
+    function toISO(dt) { try { return new Date(dt).toISOString(); } catch { return new Date().toISOString(); } }
+    function fmtDate(dt){ const d=new Date(dt); return isNaN(d)?'':d.toLocaleString(); }
+
+    function loadData(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw){ return { grades: DEFAULT_GRADES, incidents: [] }; }
+        const data = JSON.parse(raw);
+        if(!Array.isArray(data.grades)) data.grades = DEFAULT_GRADES;
+        if(!Array.isArray(data.incidents)) data.incidents = [];
+        return data;
+      }catch(e){ console.error(e); return { grades: DEFAULT_GRADES, incidents: [] }; }
+    }
+    function saveData(data){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){ alert('Failed to save. Consider exporting and clearing some data.'); console.error(e);} }
+
+    const state = { data: loadData(), filters: { grade: 'All' }, page: 1, pageSize: 20 };
+
+    function showAlert(msg, type='info'){
+      const box = $('#alerts');
+      box.innerHTML = `<div class="p-3 rounded ${type==='error'?'bg-red-50 text-red-700':'bg-emerald-50 text-emerald-700'}">${msg}</div>`;
+      box.classList.remove('hidden');
+      setTimeout(()=> box.classList.add('hidden'), 3000);
+    }
+
+    function populateGrades(){
+      const gradeOptions = ['All', ...state.data.grades];
+      // Dashboard filter
+      $('#dashGradeFilter').innerHTML = gradeOptions.map(g=>`<option>${g}</option>`).join('');
+      // New form
+      $('#fGrade').innerHTML = state.data.grades.map(g=>`<option>${g}</option>`).join('');
+      // Records filter
+      $('#rGrade').innerHTML = gradeOptions.map(g=>`<option>${g}</option>`).join('');
+      // Settings list
+      const list = $('#gradeList'); list.innerHTML='';
+      state.data.grades.forEach((g, idx)=>{
+        const li = document.importNode($('#gradeItemTpl').content, true);
+        li.querySelector('span').textContent = g;
+        li.querySelector('.rename').addEventListener('click', ()=>{
+          const name = prompt('Rename grade', g); if(!name) return; state.data.grades[idx]=name; saveData(state.data); populateGrades(); refreshAll();
+        });
+        li.querySelector('.remove').addEventListener('click', ()=>{
+          if(!confirm('Remove this grade? Incidents keep their old grade text.')) return;
+          state.data.grades.splice(idx,1); saveData(state.data); populateGrades(); refreshAll();
+        });
+        list.appendChild(li);
+      });
+    }
+
+    function addIncident(inc){ state.data.incidents.unshift(inc); saveData(state.data); }
+    function updateIncident(id, patch){ const it = state.data.incidents.find(x=>x.id===id); if(it){ Object.assign(it, patch, {updatedAt: new Date().toISOString()}); saveData(state.data);} }
+    function deleteIncident(id){ const i = state.data.incidents.findIndex(x=>x.id===id); if(i>-1){ state.data.incidents.splice(i,1); saveData(state.data);} }
+
+    function getFilteredIncidents(){
+      const grade = $('#rGrade').value || 'All';
+      const type = $('#rType').value || 'All';
+      const cat = $('#rCategory').value || 'All';
+      const q = ($('#rSearch').value||'').toLowerCase();
+      const from = $('#rFrom').value ? new Date($('#rFrom').value) : null;
+      const to = $('#rTo').value ? new Date($('#rTo').value) : null;
+      return state.data.incidents.filter(x=>{
+        if(grade!=='All' && x.grade!==grade) return false;
+        if(type!=='All' && x.type!==type) return false;
+        if(cat!=='All' && x.category!==cat) return false;
+        if(from && new Date(x.dateTime) < from) return false;
+        if(to && new Date(x.dateTime) > new Date(to.getTime()+86400000-1)) return false;
+        if(q){ const blob = `${x.student} ${x.studentId||''} ${x.description||''} ${x.action||''}`.toLowerCase(); if(!blob.includes(q)) return false; }
+        return true;
+      });
+    }
+
+    function renderRecords(){
+      let arr = getFilteredIncidents();
+      const sort = $('#rSort').value;
+      arr.sort((a,b)=>{
+        if(sort==='date_desc') return new Date(b.dateTime)-new Date(a.dateTime);
+        if(sort==='date_asc') return new Date(a.dateTime)-new Date(b.dateTime);
+        if(sort==='sev_desc') return (b.severity||0)-(a.severity||0);
+        if(sort==='sev_asc') return (a.severity||0)-(b.severity||0);
+        return 0;
+      });
+      const total = arr.length;
+      const start = (state.page-1)*state.pageSize;
+      const pageItems = arr.slice(start, start+state.pageSize);
+      $('#recordCount').textContent = `${total} records`;
+      $('#paginationInfo').textContent = total?`Showing ${start+1}-${Math.min(start+pageItems.length,total)} of ${total}`:'';
+      $('#prevPage').disabled = state.page<=1; $('#nextPage').disabled = start+state.pageSize>=total;
+
+      const tbody = $('#recordsTbody'); tbody.innerHTML='';
+      pageItems.forEach(it=>{
+        const row = document.importNode($('#recordRowTpl').content,true);
+        row.querySelector('.date').textContent = fmtDate(it.dateTime);
+        row.querySelector('.student').textContent = it.student + (it.studentId?` (${it.studentId})`:'');
+        row.querySelector('.grade').textContent = it.grade + (it.section?`-${it.section}`:'');
+        row.querySelector('.type').innerHTML = it.type==='Positive' ? `<span class="badge badge-green">Positive</span>`: `<span class="badge badge-red">Negative</span>`;
+        row.querySelector('.category').textContent = it.category;
+        row.querySelector('.severity').textContent = it.severity||'';
+        row.querySelector('.action').textContent = it.action||'';
+        row.querySelector('.parent').textContent = it.parentNotified? 'Yes':'No';
+        row.querySelector('.notes').textContent = it.notes||'';
+        row.querySelector('.edit').addEventListener('click', ()=> openEditModal(it));
+        row.querySelector('.delete').addEventListener('click', ()=> { if(confirm('Delete this record?')){ deleteIncident(it.id); renderRecords(); refreshDashboard(); showAlert('Record deleted'); }});
+        tbody.appendChild(row);
+      });
+    }
+
+    function refreshDashboard(){
+      const grade = $('#dashGradeFilter').value || 'All';
+      const from = $('#dashFrom').value ? new Date($('#dashFrom').value) : null;
+      const to = $('#dashTo').value ? new Date($('#dashTo').value) : null;
+      const arr = state.data.incidents.filter(x=>{
+        if(grade!=='All' && x.grade!==grade) return false;
+        if(from && new Date(x.dateTime) < from) return false;
+        if(to && new Date(x.dateTime) > new Date(to.getTime()+86400000-1)) return false;
+        return true;
+      });
+      const total = arr.length;
+      const pos = arr.filter(x=>x.type==='Positive').length;
+      const neg = arr.filter(x=>x.type==='Negative').length;
+      const par = arr.filter(x=>x.parentNotified).length;
+      $('#statTotal').textContent = total; $('#statPositive').textContent = pos; $('#statNegative').textContent = neg; $('#statParent').textContent = par;
+
+      const byGrade = {};
+      state.data.grades.forEach(g=>byGrade[g]=0);
+      arr.forEach(x=>{ byGrade[x.grade] = (byGrade[x.grade]||0)+1; });
+      updateCharts(pos, neg, Object.keys(byGrade), Object.values(byGrade));
+
+      const countByStudent = {};
+      arr.forEach(x=>{ const key = x.student + (x.studentId?` (${x.studentId})`:'' ); countByStudent[key] = (countByStudent[key]||0)+1; });
+      const top = Object.entries(countByStudent).sort((a,b)=>b[1]-a[1]).slice(0,10);
+      const ul = $('#topStudents'); ul.innerHTML = top.length? '': '<li class="text-slate-500">No data</li>';
+      top.forEach(([name,c])=>{ const li=document.createElement('li'); li.textContent = `${name} — ${c}`; ul.appendChild(li); });
+    }
+
+    let pieChart=null, barChart=null;
+    function updateCharts(pos, neg, labels, data){
+      const pieCtx = $('#pieChart');
+      const barCtx = $('#barChart');
+      const pieData = { labels: ['Positive','Negative'], datasets: [{ data: [pos,neg], backgroundColor: ['#22c55e','#ef4444'] }] };
+      const barData = { labels, datasets: [{ label: 'Incidents', data, backgroundColor: '#6366f1' }] };
+      if(pieChart){ pieChart.data = pieData; pieChart.update(); } else { pieChart = new Chart(pieCtx, { type:'pie', data: pieData, options:{ plugins:{ legend:{ position:'bottom' }}}}); }
+      if(barChart){ barChart.data = barData; barChart.update(); } else { barChart = new Chart(barCtx, { type:'bar', data: barData, options:{ plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true }}}}); }
+    }
+
+    function openEditModal(it){
+      $('#modalTitle').textContent = 'Edit Incident';
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `
+        <div class="grid md:grid-cols-2 gap-3">
+          <div><label class="label">Student</label><input id="eStudent" class="input" value="${it.student}"></div>
+          <div><label class="label">Student ID</label><input id="eStudentId" class="input" value="${it.studentId||''}"></div>
+          <div><label class="label">Grade</label><select id="eGrade" class="select">${state.data.grades.map(g=>`<option ${g===it.grade?'selected':''}>${g}</option>`).join('')}</select></div>
+          <div><label class="label">Section</label><input id="eSection" class="input" value="${it.section||''}"></div>
+          <div><label class="label">Date & Time</label><input id="eDateTime" type="datetime-local" class="input" value="${toLocalInputValue(it.dateTime)}"></div>
+          <div><label class="label">Category</label><select id="eCategory" class="select">${$('#fCategory').innerHTML}</select></div>
+          <div><label class="label">Type</label>
+            <select id="eType" class="select"><option ${it.type==='Positive'?'selected':''}>Positive</option><option ${it.type==='Negative'?'selected':''}>Negative</option></select>
+          </div>
+          <div><label class="label">Severity</label><input id="eSeverity" type="number" min="1" max="5" class="input" value="${it.severity||3}"></div>
+          <div class="md:col-span-2"><label class="label">Description</label><textarea id="eDescription" class="input" rows="3">${escapeHtml(it.description||'')}</textarea></div>
+          <div><label class="label">Action Taken</label><select id="eAction" class="select">${$('#fAction').innerHTML}</select></div>
+          <div><label class="label">Parent Notified</label><input id="eParent" type="checkbox" ${it.parentNotified?'checked':''} class="ml-2"></div>
+          <div class="md:col-span-2"><label class="label">Notes</label><input id="eNotes" class="input" value="${escapeHtml(it.notes||'')}"></div>
+        </div>
+        <div class="mt-3 flex gap-2 justify-end">
+          <button id="saveEdit" class="btn">Save</button>
+          <button id="cancelEdit" class="btn-secondary">Cancel</button>
+        </div>
+      `;
+      $('#modalBody').innerHTML=''; $('#modalBody').appendChild(wrap);
+      $('#modal').classList.remove('hidden'); $('#modal').classList.add('flex');
+      $('#cancelEdit').onclick = closeModal; $('#modalClose').onclick = closeModal;
+      $('#saveEdit').onclick = ()=>{
+        const patch = {
+          student: $('#eStudent').value.trim()||it.student,
+          studentId: $('#eStudentId').value.trim()||'',
+          grade: $('#eGrade').value,
+          section: $('#eSection').value.trim()||'',
+          dateTime: new Date($('#eDateTime').value||it.dateTime).toISOString(),
+          category: $('#eCategory').value,
+          type: $('#eType').value,
+          severity: parseInt($('#eSeverity').value)||3,
+          description: $('#eDescription').value.trim(),
+          action: $('#eAction').value,
+          parentNotified: $('#eParent').checked,
+          notes: $('#eNotes').value.trim()
+        };
+        updateIncident(it.id, patch); closeModal(); renderRecords(); refreshDashboard(); showAlert('Record updated');
+      };
+    }
+    function closeModal(){ $('#modal').classList.add('hidden'); $('#modal').classList.remove('flex'); }
+
+    function toLocalInputValue(iso){ if(!iso) return ''; const d = new Date(iso); const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+    function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    function exportCSV(){
+      const rows = [['ID','Student','StudentID','Grade','Section','DateTime','Type','Category','Severity','Description','Action','ParentNotified','Notes']];
+      state.data.incidents.forEach(x=>{
+        rows.push([
+          x.id, x.student, x.studentId||'', x.grade, x.section||'', x.dateTime, x.type, x.category, x.severity||'', (x.description||'').replace(/\n/g,' '), x.action||'', x.parentNotified?1:0, (x.notes||'').replace(/\n/g,' ')
+        ]);
+      });
+      const csv = rows.map(r=> r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+      downloadFile(csv, 'behavior_records.csv', 'text/csv');
+    }
+
+    function exportJSON(){ downloadFile(JSON.stringify(state.data, null, 2), 'behavior_backup.json', 'application/json'); }
+
+    function downloadFile(content, filename, mime){
+      const blob = new Blob([content], {type: mime});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); URL.revokeObjectURL(a.href);
+    }
+
+    function importFile(file){
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result;
+        if(file.name.endsWith('.json')){
+          try{ const obj = JSON.parse(text); if(obj && Array.isArray(obj.incidents) && Array.isArray(obj.grades)){ state.data = obj; saveData(state.data); populateGrades(); refreshAll(); showAlert('JSON imported'); } else { alert('Invalid JSON format.'); } } catch(e){ alert('Failed to parse JSON.'); }
+        } else if(file.name.endsWith('.csv')){
+          const lines = text.split(/\r?\n/).filter(Boolean); if(lines.length<2) return alert('CSV has no rows');
+          const header = lines[0].split(',').map(s=>s.replace(/^\"|\"$/g,''));
+          const rows = lines.slice(1).map(l=> l.match(/\"(?:[^\"]|\"\")*\"/g)?.map(s=>s.slice(1,-1).replace(/\"\"/g,'"')) || l.split(','));
+          const idx = (name)=> header.indexOf(name);
+          let imported=0;
+          rows.forEach(cols=>{
+            if(!cols.length) return;
+            const it = {
+              id: cols[idx('ID')]||uid(),
+              student: cols[idx('Student')]||'Unknown',
+              studentId: cols[idx('StudentID')]||'',
+              grade: cols[idx('Grade')]||'Unknown',
+              section: cols[idx('Section')]||'',
+              dateTime: cols[idx('DateTime')]||new Date().toISOString(),
+              type: cols[idx('Type')]||'Negative',
+              category: cols[idx('Category')]||'Other',
+              severity: parseInt(cols[idx('Severity')]||'')||'',
+              description: cols[idx('Description')]||'',
+              action: cols[idx('Action')]||'',
+              parentNotified: (cols[idx('ParentNotified')]||'0')==='1',
+              notes: cols[idx('Notes')]||'',
+              createdAt: new Date().toISOString()
+            };
+            state.data.incidents.push(it); imported++;
+          });
+          saveData(state.data); populateGrades(); refreshAll(); showAlert(`CSV imported (${imported} rows)`);
+        } else { alert('Unsupported file type.'); }
+      };
+      reader.readAsText(file);
+    }
+
+    function handleNewForm(){
+      const form = $('#incidentForm');
+      const now = new Date();
+      $('#fDateTime').value = toLocalInputValue(now.toISOString());
+      form.onsubmit = (e)=>{
+        e.preventDefault();
+        const type = $$('input[name="fType"]').find(x=>x.checked)?.value || 'Positive';
+        const inc = {
+          id: uid(),
+          student: $('#fStudent').value.trim(),
+          studentId: $('#fStudentId').value.trim(),
+          grade: $('#fGrade').value,
+          section: $('#fSection').value.trim(),
+          dateTime: new Date($('#fDateTime').value).toISOString(),
+          category: $('#fCategory').value,
+          type,
+          severity: parseInt($('#fSeverity').value)||'',
+          description: $('#fDescription').value.trim(),
+          action: $('#fAction').value,
+          parentNotified: $('#fParent').checked,
+          notes: $('#fNotes').value.trim(),
+          createdAt: new Date().toISOString()
+        };
+        if(!inc.student || !inc.description){ return alert('Please fill Student and Description.'); }
+        addIncident(inc); form.reset(); $('#fDateTime').value = toLocalInputValue(new Date().toISOString()); showAlert('Incident saved'); refreshAll();
+      };
+    }
+
+    function refreshAll(){ refreshDashboard(); renderRecords(); }
+
+    function setupTabs(){
+      $$('.tab-link').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const tab = btn.getAttribute('data-tab');
+          $$('.tab-link').forEach(b=> b.classList.remove('tab-active'));
+          btn.classList.add('tab-active');
+          $$('.tab-section').forEach(sec=> sec.classList.add('hidden'));
+          $('#'+tab).classList.remove('hidden');
+        });
+      });
+    }
+
+    function init(){
+      populateGrades();
+      setupTabs();
+      handleNewForm();
+      $('#rApply').onclick = ()=>{ state.page=1; renderRecords(); };
+      $('#prevPage').onclick = ()=>{ if(state.page>1){ state.page--; renderRecords(); } };
+      $('#nextPage').onclick = ()=>{ state.page++; renderRecords(); };
+      $('#dashFilterBtn').onclick = refreshDashboard; $('#refreshChartsBtn').onclick = refreshDashboard;
+      $('#exportCsvBtn').onclick = exportCSV; $('#exportJsonBtn').onclick = exportJSON;
+      $('#importFile').onchange = (e)=> e.target.files[0] && importFile(e.target.files[0]);
+      $('#importJsonFile').onchange = (e)=> e.target.files[0] && importFile(e.target.files[0]);
+      $('#addGradeBtn').onclick = ()=>{ const g = $('#newGrade').value.trim(); if(!g) return; if(state.data.grades.includes(g)) return alert('Grade exists'); state.data.grades.push(g); saveData(state.data); $('#newGrade').value=''; populateGrades(); refreshAll(); };
+      $('#resetAllBtn').onclick = ()=>{ if(confirm('This will clear ALL data. Make sure you exported a backup. Continue?')){ localStorage.removeItem(STORAGE_KEY); state.data = loadData(); populateGrades(); refreshAll(); showAlert('All data cleared'); } };
+
+      // Set default filters
+      $('#rGrade').value = 'All'; $('#rType').value = 'All'; $('#rCategory').value = 'All';
+      $('#dashGradeFilter').value = 'All';
+
+      // Seed example if empty
+      if(state.data.incidents.length===0){
+        const ex = [
+          {student:'Ava Smith', grade:'Grade 6', dateTime:new Date().toISOString(), type:'Positive', category:'Helping', severity:4, description:'Helped a classmate understand fractions', action:'Appreciation Note', parentNotified:false},
+          {student:'Liam Chen', grade:'Grade 6', dateTime:new Date(Date.now()-86400000).toISOString(), type:'Negative', category:'Tardiness', severity:2, description:'Arrived 10 minutes late', action:'Verbal Warning', parentNotified:false},
+          {student:'Noah Khan', grade:'Grade 7', dateTime:new Date(Date.now()-2*86400000).toISOString(), type:'Negative', category:'Disruption', severity:3, description:'Talking during lecture after reminder', action:'Written Warning', parentNotified:true},
+          {student:'Mia Patel', grade:'Grade 7', dateTime:new Date(Date.now()-3*86400000).toISOString(), type:'Positive', category:'Leadership', severity:5, description:'Led group project effectively', action:'Appreciation Note', parentNotified:true}
+        ];
+        ex.forEach(x=> addIncident({ id:uid(), student:x.student, studentId:'', grade:x.grade, section:'', dateTime:x.dateTime, category:x.category, type:x.type, severity:x.severity, description:x.description, action:x.action, parentNotified:x.parentNotified, notes:'', createdAt:new Date().toISOString() }));
+      }
+
+      refreshAll();
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
